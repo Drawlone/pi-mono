@@ -556,10 +556,20 @@ export function convertMessages(
 					? content.filter((c) => c.type !== "image_url")
 					: content;
 				if (filteredContent.length === 0) continue;
-				params.push({
-					role: "user",
-					content: filteredContent,
-				});
+
+				// For better compatibility with models that prefer simple strings, use string content if there are no images
+				const allText = filteredContent.every((c) => c.type === "text");
+				if (allText && compat.prefersStringContent) {
+					params.push({
+						role: "user",
+						content: filteredContent.map((c) => (c as ChatCompletionContentPartText).text).join("\n\n"),
+					});
+				} else {
+					params.push({
+						role: "user",
+						content: filteredContent,
+					});
+				}
 			}
 		} else if (msg.role === "assistant") {
 			// Some providers don't accept null content, use empty string instead
@@ -840,6 +850,7 @@ function detectCompat(model: Model<"openai-completions">): Required<OpenAIComple
 		vercelGatewayRouting: {},
 		zaiToolStream: false,
 		supportsStrictMode: true,
+		prefersStringContent: isNonStandard,
 	};
 }
 
@@ -867,5 +878,6 @@ function getCompat(model: Model<"openai-completions">): Required<OpenAICompletio
 		vercelGatewayRouting: model.compat.vercelGatewayRouting ?? detected.vercelGatewayRouting,
 		zaiToolStream: model.compat.zaiToolStream ?? detected.zaiToolStream,
 		supportsStrictMode: model.compat.supportsStrictMode ?? detected.supportsStrictMode,
+		prefersStringContent: model.compat.prefersStringContent ?? detected.prefersStringContent,
 	};
 }

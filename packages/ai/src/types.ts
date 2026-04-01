@@ -281,6 +281,8 @@ export interface OpenAICompletionsCompat {
 	zaiToolStream?: boolean;
 	/** Whether the provider supports the `strict` field in tool definitions. Default: true. */
 	supportsStrictMode?: boolean;
+	/** Whether the provider prefers single string content for user messages when no images are present. Default: false. */
+	prefersStringContent?: boolean;
 }
 
 /** Compatibility settings for OpenAI Responses APIs. */
