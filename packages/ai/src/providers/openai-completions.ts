@@ -114,7 +114,8 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions", OpenA
 							partial: output,
 						});
 					} else if (block.type === "toolCall") {
-						block.arguments = parseStreamingJson(block.partialArgs);
+						const parsed = parseStreamingJson(block.partialArgs);
+						block.arguments = parsed && typeof parsed === "object" ? parsed : {};
 						delete block.partialArgs;
 						stream.push({
 							type: "toolcall_end",
@@ -246,7 +247,8 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions", OpenA
 								if (toolCall.function?.arguments) {
 									delta = toolCall.function.arguments;
 									currentBlock.partialArgs += toolCall.function.arguments;
-									currentBlock.arguments = parseStreamingJson(currentBlock.partialArgs);
+									const parsed = parseStreamingJson(currentBlock.partialArgs);
+									currentBlock.arguments = parsed && typeof parsed === "object" ? parsed : {};
 								}
 								stream.push({
 									type: "toolcall_delta",
@@ -430,7 +432,10 @@ function buildParams(model: Model<"openai-completions">, context: Context, optio
 
 	// OpenRouter provider routing preferences
 	if (model.baseUrl.includes("openrouter.ai") && model.compat?.openRouterRouting) {
-		(params as any).provider = model.compat.openRouterRouting;
+		const routing = model.compat.openRouterRouting;
+		if (routing.only || routing.order) {
+			(params as any).provider = routing;
+		}
 	}
 
 	// Vercel AI Gateway provider routing preferences
@@ -557,12 +562,19 @@ export function convertMessages(
 					: content;
 				if (filteredContent.length === 0) continue;
 
-				// For better compatibility with models that prefer simple strings, use string content if there are no images
+				// For better compatibility with models that prefer simple strings, use string content if there are no images.
+				// We only do this if prefersStringContent is enabled and it's a pure text message.
 				const allText = filteredContent.every((c) => c.type === "text");
 				if (allText && compat.prefersStringContent) {
+					// Use a single newline for joining to keep the text block cohesive for models like DeepSeek/Qwen
+					const joinedText = filteredContent
+						.map((c) => (c as ChatCompletionContentPartText).text)
+						.filter(Boolean)
+						.join("\n");
+
 					params.push({
 						role: "user",
-						content: filteredContent.map((c) => (c as ChatCompletionContentPartText).text).join("\n\n"),
+						content: sanitizeSurrogates(joinedText),
 					});
 				} else {
 					params.push({
@@ -850,7 +862,7 @@ function detectCompat(model: Model<"openai-completions">): Required<OpenAIComple
 		vercelGatewayRouting: {},
 		zaiToolStream: false,
 		supportsStrictMode: true,
-		prefersStringContent: isNonStandard,
+		prefersStringContent: false,
 	};
 }
 
